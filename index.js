@@ -5,6 +5,8 @@ const path = require('path');
 const FormData = require('form-data');
 const fetch = require('node-fetch');
 
+let rids = [];
+
 const app = express();
 app.use(express.json());
 
@@ -138,6 +140,10 @@ async function sendFinalStats(botToken, adminId, totalUsers, successCount, faile
   });
 await axios.get(`https://api.teleservices.io/Broadcast/webhook/state.php?bot_token=${botToken}`)
 
+await axios.post(`https://api.teleservices.io/Broadcast/webhook/removeusers.php`, {
+    bot_token: botToken,
+    ids: rids // You can replace this with an array of IDs to remove
+  });
   if (other) {
     if (fs.existsSync(logFilePath)) {
         const formData = new FormData();
@@ -154,7 +160,7 @@ await axios.get(`https://api.teleservices.io/Broadcast/webhook/state.php?bot_tok
     }
 }
 }
-async function sendMediaOrText(botToken, userId, params, errorBreakdown, logFilePath, proxycon) {
+async function sendMediaOrText(botToken, userId, params, errorBreakdown, logFilePath, proxycon, rids) {
     const { 
         type, text, caption, file_id, parse_mode = 'Markdown', 
         disable_web_page_preview = false, protect_content = false, 
@@ -220,12 +226,10 @@ async function sendMediaOrText(botToken, userId, params, errorBreakdown, logFile
     }
 
     try {
-        // Send the message
         const response = await axios.post(`https://api.telegram.org/bot${botToken}/${apiMethod}`, requestData, proxycon);
         
-        // If pin is true, pin the message
         if (pin) {
-            const messageId = response.data.result.message_id;  // Get the message ID from the response
+            const messageId = response.data.result.message_id;
             await axios.post(`https://api.telegram.org/bot${botToken}/pinChatMessage`, {
                 chat_id: userId,
                 message_id: messageId
@@ -238,15 +242,18 @@ async function sendMediaOrText(botToken, userId, params, errorBreakdown, logFile
         if (error_code === 429) {
             const retryAfter = error.response.data.parameters.retry_after || 1;
             await delay(retryAfter * 1000);
-            return sendMediaOrText(botToken, userId, params, errorBreakdown, logFilePath);
+            return sendMediaOrText(botToken, userId, params, errorBreakdown, logFilePath, proxycon, rids);
         }
 
         if (error_code === 400 && description.includes("chat not found")) {
             errorBreakdown.invalid += 1;
+            rids.push(userId);
         } else if (error_code === 403 && description.includes("bot was blocked by the user")) {
             errorBreakdown.blocked += 1;
+            rids.push(userId);
         } else if (error_code === 403 && description.includes("user is deactivated")) {
             errorBreakdown.deleted += 1;
+            rids.push(userId);
         } else {
             errorBreakdown.other += 1;
             logFailure(userId, `Other: ${description}`, logFilePath);
@@ -254,7 +261,6 @@ async function sendMediaOrText(botToken, userId, params, errorBreakdown, logFile
         return false;
     }
 }
-
 async function fetchUsersPage(botUsername, page) {
     const url = `https://api.teleservices.io/Broadcast/public/users.php?bot_username=${botUsername}&page=${page}`;
 
@@ -386,60 +392,59 @@ app.all('/br', async (req, res) => {
     res.status(500).json({ message: 'Error during broadcast.', error: error.message });
   }
 });
+
 async function forwardMessage(botToken, userId, params, errorBreakdown, logFilePath, proxycon) {
-    const { from_chat_id, message_id, pin = false, forward_tag = true } = params; // Added forward_tag, default is true
+  const { from_chat_id, message_id, pin = false, forward_tag = true } = params;
 
-    if (!from_chat_id || !message_id) {
-        logFailure(userId, 'Missing from_chat_id or message_id for message type', logFilePath);
-        errorBreakdown.other += 1;
-        return false;
+  if (!from_chat_id || !message_id) {
+    logFailure(userId, 'Missing from_chat_id or message_id for message type', logFilePath);
+    errorBreakdown.other += 1;
+    return false;
+  }
+
+  const requestData = { chat_id: userId, from_chat_id, message_id };
+
+  try {
+    let newMessageId;
+
+    if (forward_tag) {
+      const response = await axios.post(`https://api.telegram.org/bot${botToken}/forwardMessage`, requestData, proxycon);
+      newMessageId = response.data.result.message_id;
+    } else {
+      const response = await axios.post(`https://api.telegram.org/bot${botToken}/copyMessage`, requestData, proxycon);
+      newMessageId = response.data.result.message_id;
     }
 
-    const requestData = { chat_id: userId, from_chat_id, message_id };
-
-    try {
-        let newMessageId;
-
-        // Forward or copy message based on forward_tag
-        if (forward_tag) {
-            // Forward the message
-            const response = await axios.post(`https://api.telegram.org/bot${botToken}/forwardMessage`, requestData, proxycon);
-            newMessageId = response.data.result.message_id;  // Get the message ID from the response
-        } else {
-            // Copy the message
-            const response = await axios.post(`https://api.telegram.org/bot${botToken}/copyMessage`, requestData, proxycon);
-            newMessageId = response.data.result.message_id;  // Get the new message ID from the response
-        }
-
-        // If pin is true, pin the forwarded or copied message
-        if (pin) {
-            await axios.post(`https://api.telegram.org/bot${botToken}/pinChatMessage`, {
-                chat_id: userId,
-                message_id: newMessageId
-            });
-        }
-
-        return true;
-    } catch (error) {
-        const { error_code, description } = error.response?.data || {};
-        if (error_code === 429) {
-            const retryAfter = error.response.data.parameters.retry_after || 1;
-            await delay(retryAfter * 1000);
-            return forwardMessage(botToken, userId, params, errorBreakdown, logFilePath);
-        }
-
-        if (error_code === 400 && description.includes("chat not found")) {
-            errorBreakdown.invalid += 1;
-        } else if (error_code === 403 && description.includes("bot was blocked by the user")) {
-            errorBreakdown.blocked += 1;
-        } else if (error_code === 403 && description.includes("user is deactivated")) {
-            errorBreakdown.deleted += 1;
-        } else {
-            errorBreakdown.other += 1;
-            logFailure(userId, `Other: ${description}`, logFilePath);
-        }
-        return false;
+    if (pin) {
+      await axios.post(`https://api.telegram.org/bot${botToken}/pinChatMessage`, {
+        chat_id: userId,
+        message_id: newMessageId
+      });
     }
+
+    return true;
+  } catch (error) {
+    const { error_code, description } = error.response?.data || {};
+    if (error_code === 429) {
+      const retryAfter = error.response.data.parameters.retry_after || 1;
+      await delay(retryAfter * 1000);
+      return forwardMessage(botToken, userId, params, errorBreakdown, logFilePath, proxycon, rids);
+    }
+
+    if (error_code === 400 && description.includes("chat not found")) {
+      errorBreakdown.invalid += 1;
+    } else if (error_code === 403 && description.includes("bot was blocked by the user")) {
+      errorBreakdown.blocked += 1;
+      rids.push(userId);
+    } else if (error_code === 403 && description.includes("user is deactivated")) {
+      errorBreakdown.deleted += 1;
+      rids.push(userId);
+    } else {
+      errorBreakdown.other += 1;
+      logFailure(userId, `Other: ${description}`, logFilePath);
+    }
+    return false;
+  }
 }
 
 async function sendForwardBatch(botToken, userBatch, params, errorBreakdown, logFilePath, proxycon) {
