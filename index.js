@@ -365,7 +365,9 @@ app.all('/br', async (req, res) => {
         // Add a 0.5-second delay before processing the next batch
         await delay(500);
       }
-await floodWait(botToken, adminId, messageIdForStatus, totalUsers, successCount, failedCount, errorBreakdown, 5);
+   if(currentPage < totalPages){
+        await floodWait(botToken, adminId, messageIdForStatus, totalUsers, successCount, failedCount, errorBreakdown, 10);
+          }
     }
     // Calculate the elapsed time for the broadcast
     const elapsedTime = Date.now() - startTime;
@@ -522,7 +524,9 @@ const BID = botToken.split(":")[0];
         // Add a 0.5-second delay before processing the next batch
         await delay(500);
       }
+        if(currentPage < totalPages){
         await floodWait(botToken, adminId, messageIdForStatus, totalUsers, successCount, failedCount, errorBreakdown, 5);
+        }
     }
     
     // Calculate the elapsed time for the forward broadcast
