@@ -16,6 +16,33 @@ function chunkArray(array, size) {
     );
 }
 
+async function floodWait(botToken, adminId, messageId, totalUsers, successCount, failedCount, errorBreakdown, waitTime) {
+  const { blocked, deleted, invalid, other } = errorBreakdown;
+  const statusText = `🚀 *STATUS: LIVE*\n
+Page *${currentPage}* out of *${totalPages}*\n
+🔄 *Processing Batches:* ${completedBatches}/${totalBatches}\n
+✅ *Successful Sent:* ${successCount}\n
+😔 *Failed:* ${failedCount}\n
+🔥 *Overall Status:*\n
+👥 *Total Users:* ${totalUsers}\n
+✅ *Total Successful Sent:* ${successCount}\n
+⚠️ *ERROR MATRIX:*\n
+❌ *Blocked:* ${blocked} || 🗑️ *Deleted:* ${deleted}\n
+❓ *Invalid IDs:* ${invalid} || ⚙️ *Other:* ${other}\n
+💻 *System Status:* ⚙️ *Running...*\n
+⏳ *Waiting for ${waitTime}s...*`;
+
+  // Send the update
+  await axios.post(`https://api.telegram.org/bot${botToken}/editMessageText`, {
+    chat_id: adminId,
+    message_id: messageId,
+    text: statusText,
+    parse_mode: "Markdown"
+  });
+
+  // Wait for the specified time using delay
+  await delay(waitTime * 1000);
+    }
 function logFailure(userId, reason, logFilePath) {
     const logEntry = `User ID: ${userId} | Reason: ${reason}\n`;
     fs.appendFileSync(logFilePath, logEntry, 'utf8');
@@ -319,6 +346,10 @@ app.all('/br', async (req, res) => {
       let pageSuccessCount = 0;
       let proxycon = getProxyConfig();
 
+        if(currentPage%10==0){
+         await floodWait(botToken, adminId, messageIdForStatus, totalUsers, successCount, failedCount, errorBreakdown, 30);
+        }
+
       // Process each batch
       for (let i = 0; i < pageTotalBatches; i++) {
         const batch = userBatches[i];
@@ -336,7 +367,7 @@ app.all('/br', async (req, res) => {
         // Add a 0.5-second delay before processing the next batch
         await delay(500);
       }
-        await delay(5000);
+await floodWait(botToken, adminId, messageIdForStatus, totalUsers, successCount, failedCount, errorBreakdown, 5);
     }
     // Calculate the elapsed time for the broadcast
     const elapsedTime = Date.now() - startTime;
@@ -472,6 +503,10 @@ const BID = botToken.split(":")[0];
       let pageSuccessCount = 0;
         let proxycon = getProxyConfig();
 
+        if(currentPage%10==0){
+         await floodWait(botToken, adminId, messageIdForStatus, totalUsers, successCount, failedCount, errorBreakdown, 30);
+        }
+
       // Process each batch
       for (let i = 0; i < pageTotalBatches; i++) {
         const batch = userBatches[i];
@@ -486,10 +521,10 @@ const BID = botToken.split(":")[0];
         // Update status for each page and batch
         await updateStatus(botToken, adminId, messageIdForStatus, i + 1, pageTotalBatches, totalUsers, successCount, failedCount, errorBreakdown, currentPage, totalPages);
     
-        // Add a 0.1-second delay before processing the next batch
-        await delay(300);
+        // Add a 0.5-second delay before processing the next batch
+        await delay(500);
       }
-        await delay(10000);
+        await floodWait(botToken, adminId, messageIdForStatus, totalUsers, successCount, failedCount, errorBreakdown, 5);
     }
     
     // Calculate the elapsed time for the forward broadcast
