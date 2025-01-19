@@ -18,14 +18,12 @@ function chunkArray(array, size) {
 
 async function floodWait(botToken, adminId, messageId, totalUsers, successCount, failedCount, errorBreakdown, waitTime) {
   const { blocked, deleted, invalid, other } = errorBreakdown;
-  const statusText = `🚀 *STATUS: LIVE*\n
-Page *${currentPage}* out of *${totalPages}*\n
-🔄 *Processing Batches:* ${completedBatches}/${totalBatches}\n
+  const statusText = `🚀 *STATUS: Waiting 😴...*\n
+
 ✅ *Successful Sent:* ${successCount}\n
 😔 *Failed:* ${failedCount}\n
 🔥 *Overall Status:*\n
 👥 *Total Users:* ${totalUsers}\n
-✅ *Total Successful Sent:* ${successCount}\n
 ⚠️ *ERROR MATRIX:*\n
 ❌ *Blocked:* ${blocked} || 🗑️ *Deleted:* ${deleted}\n
 ❓ *Invalid IDs:* ${invalid} || ⚙️ *Other:* ${other}\n
