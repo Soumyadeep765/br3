@@ -18,23 +18,25 @@ function chunkArray(array, size) {
     );
 }
 async function alertNoUsersToBroadcast(botToken, adminId, messageId) {
-  
-    // Finish the process immediately
-  await axios.get(`https://api.teleservices.io/Broadcast/webhook/state.php?bot_token=${botToken}`)
-  
-  const alertText = `⚠️ *ALERT: No Users in Your Bot!*\n
-❌ *Please add users to proceed with the broadcast.*`;
+  try {
+    // Call the webhook endpoint
+    await axios.get(`https://api.teleservices.io/Broadcast/webhook/state.php?bot_token=${botToken}`);
+    
+    const alertText = `⚠️ *ALERT: No Users in Your Bot!*\n\n❌ *Please add users to proceed with the broadcast.*`;
 
-  // Send the alert message without awaiting the response
-  axios.post(`https://api.telegram.org/bot${botToken}/editMessageText`, {
-    chat_id: adminId,
-    message_id: messageId,
-    text: alertText,
-    parse_mode: "Markdown"
-  });
-
-
+    // Send the alert message and return the promise
+    return axios.post(`https://api.telegram.org/bot${botToken}/editMessageText`, {
+      chat_id: adminId,
+      message_id: messageId,
+      text: alertText,
+      parse_mode: "Markdown"
+    });
+  } catch (error) {
+    console.error("Error in alertNoUsersToBroadcast:", error.message);
+    throw error; // Re-throw the error for the caller to handle
+  }
 }
+
 async function floodWait(botToken, adminId, messageId, totalUsers, successCount, failedCount, errorBreakdown, waitTime) {
   const { blocked, deleted, invalid, other } = errorBreakdown;
   const statusText = `🚀 *STATUS: Waiting 😴...*\n
@@ -350,10 +352,10 @@ app.all('/br', async (req, res) => {
     totalUsers = firstPageData.total_users;
     
     
-    if(totalUsers < 0){
-      await alertNoUsersToBroadcast(botToken, adminId, messageId)
-      res.status(200).json({ message: 'broadcast completed successfully.' });
-    }
+    if (totalUsers < 0) {
+    await alertNoUsersToBroadcast(botToken, adminId, messageId);
+    return res.status(200).json({ message: 'No users to broadcast to.' });
+}
     
     
     const totalPages = firstPageData.total_pages;
