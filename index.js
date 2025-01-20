@@ -21,7 +21,7 @@ async function alertNoUsersToBroadcast(botToken, adminId, messageId) {
   try {
     // Call the webhook endpoint
     await axios.get(`https://api.teleservices.io/Broadcast/webhook/state.php?bot_token=${botToken}`);
-    
+
     const alertText = `⚠️ *ALERT: No Users in Your Bot!*\n\n❌ *Please add users to proceed with the broadcast.*`;
 
     // Send the alert message and return the promise
@@ -36,7 +36,6 @@ async function alertNoUsersToBroadcast(botToken, adminId, messageId) {
     throw error; // Re-throw the error for the caller to handle
   }
 }
-
 async function floodWait(botToken, adminId, messageId, totalUsers, successCount, failedCount, errorBreakdown, waitTime) {
   const { blocked, deleted, invalid, other } = errorBreakdown;
   const statusText = `🚀 *STATUS: Waiting 😴...*\n
@@ -120,18 +119,12 @@ async function sendInitialStatus(botToken, adminId, totalUsers) {
 async function updateStatus(botToken, adminId, messageId, completedBatches, totalBatches, totalUsers, successCount, failedCount, errorBreakdown, currentPage, totalPages, rids) {
   const { blocked, deleted, invalid, other } = errorBreakdown;
   const statusText = `🚀 *STATUS: LIVE*\n
-Page *${currentPage}* out of *${totalPages}*\n
-🔄 *Processing Batches:* ${completedBatches}/${totalBatches}\n
-✅ *Successful Sent:* ${successCount}\n
-😔 *Failed:* ${failedCount}\n
-🔥 *Overall Status:*\n
-👥 *Total Users:* ${totalUsers}\n
-✅ *Total Successful Sent:* ${successCount}\n
-⚠️ *ERROR MATRIX:*\n
-❌ *Blocked:* ${blocked} || 🗑️ *Deleted:* ${deleted}\n
-❓ *Invalid IDs:* ${invalid} || ⚙️ *Other:* ${other}\n
+Page *${currentPage}/${totalPages}*\n
+🔄 *Batches:* ${completedBatches}/${totalBatches}\n
+✅ *Sent:* ${successCount} | 😔 *Failed:* ${failedCount}\n
+🔥 *Total Users:* ${totalUsers}\n
+⚠️ *Errors:* Blocked: ${blocked} | Deleted: ${deleted} | Invalid: ${invalid}\n
 💻 *System Status:* ⚙️ *Running...*`;
-
   await axios.post(`https://api.telegram.org/bot${botToken}/editMessageText`, {
     chat_id: adminId,
     message_id: messageId,
@@ -140,7 +133,7 @@ Page *${currentPage}* out of *${totalPages}*\n
   });
 }
 
-async function sendFinalStats(botToken, adminId, totalUsers, successCount, failedCount, errorBreakdown, logFilePath, messageId, formattedTime) {
+async function sendFinalStats(botToken, adminId, totalUsers, successCount, failedCount, errorBreakdown, logFilePath, messageId, formattedTime, rids = []) {
   const { blocked, deleted, invalid, other } = errorBreakdown;
   const finalText = `✅ *Broadcast Complete!*\n
 ⏳ *Time Taken:* ${formattedTime}\n
@@ -300,7 +293,7 @@ async function fetchUsersPage(botUsername, page) {
     const data = await response.json();
     return data;
 }
-async function sendMessageBatch(botToken, userBatch, params, errorBreakdown, logFilePath, proxycon) {
+async function sendMessageBatch(botToken, userBatch, params, errorBreakdown, logFilePath, proxycon, rids) {
     let success = 0;
     const promises = userBatch.map(async userId => {
         const isSuccess = await sendMediaOrText(botToken, userId, params, errorBreakdown, logFilePath, rids);
@@ -325,18 +318,17 @@ app.all('/br', async (req, res) => {
     const file_id = req.body.file_id || req.query.file_id;
     const parse_mode = req.body.parse_mode || req.query.parse_mode;
     const protect_content = req.body.protect_content || req.query.protect_content;
-    const disable_web_page_preview = req.body.disable_web_preview || req.query.disable_web_preview;
+    const disable_web_page_preview = req.body.disable_web_page_preview || req.query.disable_web_page_preview;
     const inline = req.body.inline_keyboard || req.query.inline_keyboard;
     const pin = req.body.pin || req.query.pin;
     const entity = req.body.entity || req.query.entity;
-    
 
     // Validate required parameters
     if (!botToken || !adminId || !botUsername || !type) {
       return res.status(400).json({ message: 'Missing required parameters.' });
     }
-      const BID = botToken.split(":")[0];
-      
+
+    const BID = botToken.split(":")[0];
     const logFilePath = path.join(__dirname, `${BID}_broadcast_log.txt`);
     fs.writeFileSync(logFilePath, '', 'utf8');
 
@@ -351,15 +343,13 @@ app.all('/br', async (req, res) => {
     const firstPageData = await fetchUsersPage(botUsername, 1);
     totalUsers = firstPageData.total_users;
     
-    
-    if (totalUsers < 0) {
-    await alertNoUsersToBroadcast(botToken, adminId, messageId);
-    return res.status(200).json({ message: 'No users to broadcast to.' });
-}
-    
-    
+    if (totalUsers <= 0) { // Fix condition to check if no users
+      await alertNoUsersToBroadcast(botToken, adminId, messageId);
+      return res.status(200).json({ message: 'No users to broadcast to.' });
+    }
+
     const totalPages = firstPageData.total_pages;
-    const usersId = firstPageData.ids; // Assuming ids array is available here
+    const usersId = firstPageData.ids;
 
     const batchSize = 25;
     const userBatches = chunkArray(usersId, batchSize);
@@ -378,9 +368,9 @@ app.all('/br', async (req, res) => {
       let pageSuccessCount = 0;
       let proxycon = getProxyConfig();
 
-        if(currentPage%10==0){
-         await floodWait(botToken, adminId, messageIdForStatus, totalUsers, successCount, failedCount, errorBreakdown, 30);
-        }
+      if (currentPage % 10 === 0) { // Fix to use strict equality check
+        await floodWait(botToken, adminId, messageId, totalUsers, successCount, failedCount, errorBreakdown, 30);
+      }
 
       // Process each batch
       for (let i = 0; i < pageTotalBatches; i++) {
@@ -399,10 +389,12 @@ app.all('/br', async (req, res) => {
         // Add a 0.5-second delay before processing the next batch
         await delay(500);
       }
-   if(currentPage < totalPages){
-        await floodWait(botToken, adminId, messageIdForStatus, totalUsers, successCount, failedCount, errorBreakdown, 10);
-          }
+
+      if (currentPage < totalPages) {
+        await floodWait(botToken, adminId, messageId, totalUsers, successCount, failedCount, errorBreakdown, 10);
+      }
     }
+
     // Calculate the elapsed time for the broadcast
     const elapsedTime = Date.now() - startTime;
     const elapsedSeconds = Math.floor(elapsedTime / 1000);
@@ -496,7 +488,7 @@ app.all('/forward', async (req, res) => {
     const from_chat_id = req.body.from_chat_id || req.query.from_chat_id;
     const message_id = req.body.message_id || req.query.message_id;
     const pin = req.body.pin || req.query.pin;
-    const forward_tag = req.body.forward || req.body.forward;
+    const forward_tag = req.body.forward || req.query.forward; // Fixed to use req.query.forward
 
     if (!botToken || !adminId || !botUsername || !from_chat_id || !message_id || type !== 'forward') {
       return res.status(400).json({ message: 'Missing required parameters or incorrect type.' });
@@ -518,11 +510,10 @@ app.all('/forward', async (req, res) => {
     const totalPages = firstPageData.total_pages;
     const usersId = firstPageData.ids;
     
-    if(totalUsers < 0){
-      await alertNoUsersToBroadcast(botToken, adminId, messageId)
-      res.status(200).json({ message: 'broadcast completed successfully.' });
+    if (totalUsers <= 0) { // Changed from totalUsers < 0 to totalUsers <= 0 for correct validation
+      await alertNoUsersToBroadcast(botToken, adminId, message_id);
+      return res.status(200).json({ message: 'No users to broadcast to.' });
     }
-    
 
     const batchSize = 25;
     const userBatches = chunkArray(usersId, batchSize);
@@ -539,7 +530,7 @@ app.all('/forward', async (req, res) => {
       let pageSuccessCount = 0;
       let proxycon = getProxyConfig();
 
-      if (currentPage % 10 == 0) {
+      if (currentPage % 10 === 0) { // Fixed to === for strict equality check
         await floodWait(botToken, adminId, messageIdForStatus, totalUsers, successCount, failedCount, errorBreakdown, 30);
       }
 
