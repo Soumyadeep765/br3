@@ -17,7 +17,7 @@ function chunkArray(array, size) {
         array.slice(i * size, i * size + size)
     );
 }
-async function alertNoUsersToBroadcast(botToken, adminId, messageId) {
+async function alertNoUsersToBroadcast(botToken, adminId) {
   try {
     // Call the webhook endpoint
     await axios.get(`https://api.teleservices.io/Broadcast/webhook/state.php?bot_token=${botToken}`);
@@ -25,9 +25,8 @@ async function alertNoUsersToBroadcast(botToken, adminId, messageId) {
     const alertText = `⚠️ *ALERT: No Users in Your Bot!*\n\n❌ *Please add users to proceed with the broadcast.*`;
 
     // Send the alert message and return the promise
-    return axios.post(`https://api.telegram.org/bot${botToken}/editMessageText`, {
+    return axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       chat_id: adminId,
-      message_id: messageId,
       text: alertText,
       parse_mode: "Markdown"
     });
@@ -344,7 +343,7 @@ app.all('/br', async (req, res) => {
     totalUsers = firstPageData.total_users;
     
     if (totalUsers <= 0) { // Fix condition to check if no users
-      await alertNoUsersToBroadcast(botToken, adminId, messageId);
+      await alertNoUsersToBroadcast(botToken, adminId);
       return res.status(200).json({ message: 'No users to broadcast to.' });
     }
 
@@ -511,7 +510,7 @@ app.all('/forward', async (req, res) => {
     const usersId = firstPageData.ids;
     
     if (totalUsers <= 0) { // Changed from totalUsers < 0 to totalUsers <= 0 for correct validation
-      await alertNoUsersToBroadcast(botToken, adminId, message_id);
+      await alertNoUsersToBroadcast(botToken, adminId);
       return res.status(200).json({ message: 'No users to broadcast to.' });
     }
 
