@@ -150,7 +150,7 @@ async function sendFinalStats(botToken, adminId, totalUsers, successCount, faile
     parse_mode: "Markdown"
   });
 await axios.get(`https://api.teleservices.io/Broadcast/webhook/state.php?bot_token=${botToken}`)
-
+console.log("Removing ids : "+rids)
 await axios.post(`https://api.teleservices.io/Broadcast/webhook/removeusers.php`, {
     bot_token: botToken,
     ids: rids // You can replace this with an array of IDs to remove
