@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const FormData = require('form-data');
 const fetch = require('node-fetch');
-
+let rids = [];
 
 
 const app = express();
@@ -22,7 +22,7 @@ async function alertNoUsersToBroadcast(botToken, adminId) {
     // Call the webhook endpoint
     await axios.get(`https://api.teleservices.io/Broadcast/webhook/state.php?bot_token=${botToken}`);
 
-    const alertText = `⚠️ *ALERT: No Users in Your Bot!*\n\n❌ *Please add users to proceed with the broadcast.*`;
+    const alertText = `⚠️ *ALERT: No Users in Your Bot!*\n\n🚨 *Oops! It looks like your bot doesn't have any users yet.*\n\n❌ *Please add users to your bot to proceed with the broadcast.*\n\n💬 Need help? Join our [Support Group](https://t.me/teleservices_support).\n📖 For documentation, check: [Teleservices Docs](https://docs.teleservices.io/#BJS)`;
 
     // Send the alert message and return the promise
     return axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
@@ -106,7 +106,7 @@ async function getProxyConfig() {
                     }
 
 async function sendInitialStatus(botToken, adminId, totalUsers) {
-    const startingText = `🚀 Starting broadcast to ${totalUsers} users...`;
+    const startingText = `🚀`;
     const response = await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
         chat_id: adminId,
         text: startingText,
@@ -115,14 +115,14 @@ async function sendInitialStatus(botToken, adminId, totalUsers) {
     return response.data.result.message_id;
 }
 
-async function updateStatus(botToken, adminId, messageId, completedBatches, totalBatches, totalUsers, successCount, failedCount, errorBreakdown, currentPage, totalPages, rids) {
+async function updateStatus(botToken, adminId, messageId, completedBatches, totalBatches, totalUsers, successCount, failedCount, errorBreakdown, currentPage, totalPages) {
   const { blocked, deleted, invalid, other } = errorBreakdown;
   const statusText = `🚀 *STATUS: LIVE*\n
 Page *${currentPage}/${totalPages}*\n
 🔄 *Batches:* ${completedBatches}/${totalBatches}\n
 ✅ *Sent:* ${successCount} | 😔 *Failed:* ${failedCount}\n
 🔥 *Total Users:* ${totalUsers}\n
-⚠️ *Errors:* Blocked: ${blocked} | Deleted: ${deleted} | Invalid: ${invalid}\n
+⚠️ *Errors:* Blocked: ${blocked} | Deleted: ${deleted} | Other: ${other}\n
 💻 *System Status:* ⚙️ *Running...*`;
   await axios.post(`https://api.telegram.org/bot${botToken}/editMessageText`, {
     chat_id: adminId,
@@ -132,7 +132,7 @@ Page *${currentPage}/${totalPages}*\n
   });
 }
 
-async function sendFinalStats(botToken, adminId, totalUsers, successCount, failedCount, errorBreakdown, logFilePath, messageId, formattedTime, rids = []) {
+async function sendFinalStats(botToken, adminId, totalUsers, successCount, failedCount, errorBreakdown, logFilePath, messageId, formattedTime) {
   const { blocked, deleted, invalid, other } = errorBreakdown;
   const finalText = `✅ *Broadcast Complete!*\n
 ⏳ *Time Taken:* ${formattedTime}\n
@@ -171,7 +171,7 @@ await axios.post(`https://api.teleservices.io/Broadcast/webhook/removeusers.php`
     }
 }
 }
-async function sendMediaOrText(botToken, userId, params, errorBreakdown, logFilePath, proxycon, rids = []) {
+async function sendMediaOrText(botToken, userId, params, errorBreakdown, logFilePath, proxycon) {
     const { 
         type, text, caption, file_id, parse_mode = 'Markdown', 
         disable_web_page_preview = false, protect_content = false, 
@@ -267,6 +267,7 @@ async function sendMediaOrText(botToken, userId, params, errorBreakdown, logFile
             rids.push(userId);
         } else {
             errorBreakdown.other += 1;
+            rids.push(userId);
             logFailure(userId, `Other: ${description}`, logFilePath);
         }
         return false;
@@ -292,10 +293,10 @@ async function fetchUsersPage(botUsername, page) {
     const data = await response.json();
     return data;
 }
-async function sendMessageBatch(botToken, userBatch, params, errorBreakdown, logFilePath, proxycon, rids) {
+async function sendMessageBatch(botToken, userBatch, params, errorBreakdown, logFilePath, proxycon) {
     let success = 0;
     const promises = userBatch.map(async userId => {
-        const isSuccess = await sendMediaOrText(botToken, userId, params, errorBreakdown, logFilePath, rids);
+        const isSuccess = await sendMediaOrText(botToken, userId, params, errorBreakdown, logFilePath);
         if (isSuccess) success += 1;
     });
     await Promise.all(promises);
@@ -336,8 +337,7 @@ app.all('/br', async (req, res) => {
     let failedCount = 0;
     const errorBreakdown = { blocked: 0, deleted: 0, invalid: 0, other: 0 };
     let messageId = null;
-    let rids = [];
-
+    
     // Fetch the users from the first page
     const firstPageData = await fetchUsersPage(botUsername, 1);
     totalUsers = firstPageData.total_users;
@@ -376,14 +376,14 @@ app.all('/br', async (req, res) => {
         const batch = userBatches[i];
         const batchSuccess = await sendMessageBatch(botToken, batch, { 
           type, text, caption, file_id, parse_mode, 
-          disable_web_page_preview, protect_content, inline, pin, entity }, errorBreakdown, logFilePath, proxycon, rids);
+          disable_web_page_preview, protect_content, inline, pin, entity }, errorBreakdown, logFilePath, proxycon);
     
         pageSuccessCount += batchSuccess;
         successCount += batchSuccess;
         failedCount += batch.length - batchSuccess;
     
         // Update status for each page and batch
-        await updateStatus(botToken, adminId, messageId, i + 1, pageTotalBatches, totalUsers, successCount, failedCount, errorBreakdown, currentPage, totalPages, rids);
+        await updateStatus(botToken, adminId, messageId, i + 1, pageTotalBatches, totalUsers, successCount, failedCount, errorBreakdown, currentPage, totalPages);
     
         // Add a 0.5-second delay before processing the next batch
         await delay(500);
@@ -403,12 +403,12 @@ app.all('/br', async (req, res) => {
       : `${elapsedSeconds}s`;
 
     // Send final stats to the admin
-    await sendFinalStats(botToken, adminId, totalUsers, successCount, failedCount, errorBreakdown, logFilePath, messageId, formattedTime, rids);
+    await sendFinalStats(botToken, adminId, totalUsers, successCount, failedCount, errorBreakdown, logFilePath, messageId, formattedTime);
 
-    res.status(200).json({ message: 'Broadcast completed successfully.' });
+    return res.status(200).json({ message: 'Broadcast completed successfully.' });
   } catch (error) {
     console.error('Error during broadcast:', error);
-    res.status(500).json({ message: 'Error during broadcast.', error: error.message });
+    return res.status(500).json({ message: 'Error during broadcast.', error: error.message });
   }
 });
 
@@ -569,5 +569,5 @@ app.all('/forward', async (req, res) => {
   }
 });
 app.listen(3000, () => {
-    console.log('Server running on port 80');
+  console.log('Server running on port 3000');
 });
