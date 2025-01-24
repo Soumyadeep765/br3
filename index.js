@@ -7,6 +7,7 @@ const fetch = require('node-fetch');
 let rids = [];
 
 
+
 const app = express();
 app.use(express.json());
 
@@ -63,6 +64,13 @@ async function floodWait(botToken, adminId, messageId, totalUsers, successCount,
 function logFailure(userId, reason, logFilePath) {
     const logEntry = `User ID: ${userId} | Reason: ${reason}\n`;
     fs.appendFileSync(logFilePath, logEntry, 'utf8');
+}
+function chunkArrays(array, chunkSize) {
+  const chunks = [];
+  for (let i = 0; i < array.length; i += chunkSize) {
+    chunks.push(array.slice(i, i + chunkSize));
+  }
+  return chunks;
 }
 async function getProxyConfig() {
     const url = "https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page=1&page_size=1&country_code__in=DE";
@@ -150,11 +158,16 @@ async function sendFinalStats(botToken, adminId, totalUsers, successCount, faile
     parse_mode: "Markdown"
   });
 await axios.get(`https://api.teleservices.io/Broadcast/webhook/state.php?bot_token=${botToken}`)
-console.log("Removing ids : "+rids)
-await axios.post(`https://api.teleservices.io/Broadcast/webhook/removeusers.php`, {
+
+    
+const chunks = chunkArrays(rids, 1000);
+
+for (const chunk of chunks) {
+  await axios.post(`https://api.teleservices.io/Broadcast/webhook/removeusers.php`, {
     bot_token: botToken,
-    ids: rids // You can replace this with an array of IDs to remove
+    ids: chunk,
   });
+}
   if (other) {
     if (fs.existsSync(logFilePath)) {
         const formData = new FormData();
