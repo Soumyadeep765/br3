@@ -160,14 +160,13 @@ async function sendFinalStats(botToken, adminId, totalUsers, successCount, faile
 await axios.get(`https://api.teleservices.io/Broadcast/webhook/state.php?bot_token=${botToken}`)
 
     
-const chunks = chunkArrays(rids, 1000);
 
-for (const chunk of chunks) {
   await axios.post(`https://api.teleservices.io/Broadcast/webhook/removeusers.php`, {
     bot_token: botToken,
-    ids: chunk,
+    admin_chat_id: adminId,
+    ids: rids,
   });
-}
+
   if (other) {
     if (fs.existsSync(logFilePath)) {
         const formData = new FormData();
