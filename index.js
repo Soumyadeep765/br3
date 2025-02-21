@@ -187,14 +187,13 @@ async function sendMediaOrText(botToken, userId, params, errorBreakdown, logFile
     const { 
         type, text, caption, file_id, parse_mode = 'Markdown', 
         disable_web_page_preview = false, protect_content = false, 
-        inline = [], pin = false, entities = null } = params;
+        inline = [], pin = false, entities = null} = params;
     
     const commonData = {
         chat_id: userId,
         parse_mode,
         protect_content,
-        reply_markup: { inline_keyboard: inline },
-        entities
+        reply_markup: { inline_keyboard: inline }
     };
     
     let apiMethod, requestData;
