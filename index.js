@@ -400,9 +400,9 @@ app.all('/br', async (req, res) => {
         await delay(500);
       }
 
-      if (currentPage < totalPages) {
-        await floodWait(botToken, adminId, messageId, totalUsers, successCount, failedCount, errorBreakdown, 10);
-      }
+      if (currentPage > 1 && (currentPage - 1) % 10 === 0) {
+  await floodWait(botToken, adminId, messageIdForStatus, totalUsers, successCount, failedCount, errorBreakdown, 30);
+}
     }
 
     // Calculate the elapsed time for the broadcast
@@ -423,8 +423,8 @@ app.all('/br', async (req, res) => {
   }
 });
 
-async function forwardMessage(botToken, userId, params, errorBreakdown, logFilePath, proxycon, rids =[]) {
-  const { from_chat_id, message_id, pin = false, forward_tag = true } = params;
+async function forwardMessage(botToken, userId, params, errorBreakdown, logFilePath, proxycon, rids = []) {
+  const { from_chat_id, message_id, pin = false, forward_tag = false } = params;
 
   if (!from_chat_id || !message_id) {
     logFailure(userId, 'Missing from_chat_id or message_id for message type', logFilePath);
@@ -463,7 +463,7 @@ async function forwardMessage(botToken, userId, params, errorBreakdown, logFileP
 
     if (error_code === 400 && description.includes("chat not found")) {
       errorBreakdown.invalid += 1;
-      rids.push(userId)
+      rids.push(userId);
     } else if (error_code === 403 && description.includes("bot was blocked by the user")) {
       errorBreakdown.blocked += 1;
       rids.push(userId);
@@ -540,8 +540,8 @@ app.all('/forward', async (req, res) => {
       let pageSuccessCount = 0;
       let proxycon = getProxyConfig();
 
-      if (currentPage % 10 === 0) { // Fixed to === for strict equality check
-        await floodWait(botToken, adminId, messageIdForStatus, totalUsers, successCount, failedCount, errorBreakdown, 30);
+      if (currentPage > 1 && (currentPage - 1) % 10 === 0) {
+  await floodWait(botToken, adminId, messageIdForStatus, totalUsers, successCount, failedCount, errorBreakdown, 30);
       }
 
       for (let i = 0; i < pageTotalBatches; i++) {
