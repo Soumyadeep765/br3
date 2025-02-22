@@ -141,8 +141,8 @@ Page *${currentPage}/${totalPages}*\n
 }
 
 async function sendFinalStats(botToken, adminId, totalUsers, successCount, failedCount, errorBreakdown, logFilePath, messageId, formattedTime) {
-  const { blocked, deleted, invalid, other } = errorBreakdown;
-  const finalText = `✅ *Broadcast Complete!*\n
+    const { blocked, deleted, invalid, other } = errorBreakdown;
+    const finalText = `✅ *Broadcast Complete!*\n
 ⏳ *Time Taken:* ${formattedTime}\n
 👥 *Total Users:* ${totalUsers} | ✅ *Sent:* ${successCount}\n
 😔 *Failed:* ${failedCount}\n
@@ -151,38 +151,60 @@ async function sendFinalStats(botToken, adminId, totalUsers, successCount, faile
 ❓ *Invalid IDs:* ${invalid} || ⚙️ *Other:* ${other}\n
 🎯 *System Status:* *Complete!* 😎`;
 
-  await axios.post(`https://api.telegram.org/bot${botToken}/editMessageText`, {
-    chat_id: adminId,
-    message_id: messageId,
-    text: finalText,
-    parse_mode: "Markdown"
-  });
-await axios.get(`https://api.teleservices.io/Broadcast/webhook/state.php?bot_token=${botToken}`)
+    await axios.post(`https://api.telegram.org/bot${botToken}/editMessageText`, {
+        chat_id: adminId,
+        message_id: messageId,
+        text: finalText,
+        parse_mode: "Markdown"
+    });
 
-    
+    await axios.get(`https://api.teleservices.io/Broadcast/webhook/state.php?bot_token=${botToken}`);
 
-  await axios.post(`https://api.teleservices.io/Broadcast/webhook/removeusers.php`, {
-    bot_token: botToken,
-    admin_chat_id: adminId,
-    ids: rids,
-  });
+    try {
+        if (fs.existsSync(logFilePath)) {
+            const formData = new FormData();
+            formData.append('chat_id', adminId);
+            formData.append('document', fs.createReadStream(logFilePath));
 
-  if (other) {
-    if (fs.existsSync(logFilePath)) {
-        const formData = new FormData();
-        formData.append('chat_id', adminId);
-        formData.append('document', fs.createReadStream(logFilePath));
-        await axios.post(`https://api.telegram.org/bot${botToken}/sendDocument`, formData, {
-            headers: formData.getHeaders()
+            console.log("Sending log file...");
+
+            const response = await axios.post(`https://api.telegram.org/bot${botToken}/sendDocument`, formData, {
+                headers: formData.getHeaders()
+            });
+
+            if (response.status === 200) {
+                console.log("Log file sent successfully.");
+                fs.unlinkSync(logFilePath);
+                console.log("Log file deleted after successful send.");
+            } else {
+                console.error(`Failed to send log file. Status code: ${response.status}`);
+                await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                    chat_id: adminId,
+                    text: `⚠️ Failed to send log file. Status code: ${response.status}`,
+                    parse_mode: "Markdown"
+                });
+                fs.unlinkSync(logFilePath);
+                console.log("Log file deleted after sending failure alert.");
+            }
+        } else {
+            console.log("Log file does not exist.");
+        }
+    } catch (error) {
+        console.error('Error while sending the log file:', error.message);
+
+        await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            chat_id: adminId,
+            text: `⚠️ Failed to send log file: ${error.message}`,
+            parse_mode: "Markdown"
         });
-        fs.unlinkSync(logFilePath);  // Delete the file after sending
-    }
-} else {
-    if (fs.existsSync(logFilePath)) {
-        fs.unlinkSync(logFilePath);  // Delete the log file only if it exists and no errors occurred
+
+        if (fs.existsSync(logFilePath)) {
+            fs.unlinkSync(logFilePath);
+            console.log("Log file deleted after error alert.");
+        }
     }
 }
-}
+
 async function sendMediaOrText(botToken, userId, params, errorBreakdown, logFilePath, proxycon) {
     const { 
         type, text, caption, file_id, parse_mode = 'Markdown', 
